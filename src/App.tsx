@@ -10,6 +10,7 @@ import { loadSettings, saveSettings } from './lib/storage';
 import { ExtractionResult, AppSettings } from './types/extractor';
 import { OCRProgress } from './lib/local-ocr';
 import { History, SlidersHorizontal } from 'lucide-react';
+import { Analytics } from '@vercel/analytics/react';
 
 interface ImageHistoryEntry {
   imageDataUrl: string;
@@ -242,6 +243,7 @@ export default function App() {
   return (
     <ToastProvider>
       <SnapExtractApp />
+      <Analytics />
     </ToastProvider>
   );
 }
