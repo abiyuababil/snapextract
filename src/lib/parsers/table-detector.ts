@@ -138,15 +138,17 @@ export function reconstructTableFromWords(words?: OCRWord[]): TableData | null {
       }
     }
 
-    if (cells.some((c) => c.trim().length > 0)) {
+    if (cells.some((c) => c.replace(/<br\s*\/?>/gi, '').trim().length > 0)) {
       matrix.push(cells);
     }
   }
 
   if (matrix.length < 2) return null;
 
-  const headers = matrix[0].map((h, i) => h.trim() || `Col ${i + 1}`);
-  const dataRows = matrix.slice(1);
+  const headers = matrix[0].map((h, i) => h.replace(/<br\s*\/?>/gi, ' ').trim() || `Col ${i + 1}`);
+  const dataRows = matrix.slice(1).filter((r) =>
+    r.some((c) => c.replace(/<br\s*\/?>/gi, '').trim().length > 0)
+  );
 
   return {
     headers,
@@ -159,12 +161,17 @@ export function reconstructTableFromWords(words?: OCRWord[]): TableData | null {
  * Reconstructs a table from raw text with delimiters (tabs, pipes, multi-space)
  */
 export function parseTableFromText(text: string): TableData | null {
-  const lines = text
+  const cleanText = text.replace(/<br\s*\/?>/gi, ' ');
+  const lines = cleanText
     .split(/\r?\n/)
     .map((l) => l.trim())
     .filter(Boolean);
 
   if (lines.length < 2) return null;
+
+  // Helper to filter out blank rows
+  const filterEmptyRows = (rows: string[][]) =>
+    rows.filter((r) => r.some((c) => c.trim().length > 0));
 
   // Check if tab-delimited
   const hasTabs = lines.filter((l) => l.includes('\t')).length >= 2;
@@ -176,11 +183,14 @@ export function parseTableFromText(text: string): TableData | null {
         while (r.length < colCount) r.push('');
         return r;
       });
-      return {
-        headers: normalizedRows[0].map((h, i) => h || `Col ${i + 1}`),
-        rows: normalizedRows.slice(1),
-        rawText: text,
-      };
+      const validRows = filterEmptyRows(normalizedRows);
+      if (validRows.length >= 2) {
+        return {
+          headers: validRows[0].map((h, i) => h || `Col ${i + 1}`),
+          rows: validRows.slice(1),
+          rawText: text,
+        };
+      }
     }
   }
 
@@ -200,11 +210,14 @@ export function parseTableFromText(text: string): TableData | null {
         while (r.length < colCount) r.push('');
         return r;
       });
-      return {
-        headers: normalizedRows[0].map((h, i) => h || `Col ${i + 1}`),
-        rows: normalizedRows.slice(1),
-        rawText: text,
-      };
+      const validRows = filterEmptyRows(normalizedRows);
+      if (validRows.length >= 2) {
+        return {
+          headers: validRows[0].map((h, i) => h || `Col ${i + 1}`),
+          rows: validRows.slice(1),
+          rawText: text,
+        };
+      }
     }
   }
 
@@ -218,11 +231,14 @@ export function parseTableFromText(text: string): TableData | null {
         while (r.length < colCount) r.push('');
         return r;
       });
-      return {
-        headers: normalizedRows[0].map((h, i) => h || `Col ${i + 1}`),
-        rows: normalizedRows.slice(1),
-        rawText: text,
-      };
+      const validRows = filterEmptyRows(normalizedRows);
+      if (validRows.length >= 2) {
+        return {
+          headers: validRows[0].map((h, i) => h || `Col ${i + 1}`),
+          rows: validRows.slice(1),
+          rawText: text,
+        };
+      }
     }
   }
 

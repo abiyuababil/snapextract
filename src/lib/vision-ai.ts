@@ -54,7 +54,7 @@ FOR SHOPPING / RESTAURANT RECEIPTS / INVOICES:
 }
 
 FOR TABULAR / SPREADSHEET / EXCEL / GOOGLE SHEETS / GRID / MULTI-COLUMN DATA:
-(CRITICAL: If the image contains a spreadsheet, Excel rows/columns, table headers, or grid cells, ALWAYS return "type": "table" with all columns and rows intact. Do NOT dump it into general text!)
+(CRITICAL: If the image contains a spreadsheet, Excel rows/columns, table headers, or grid cells, ALWAYS return "type": "table" with all columns and rows intact. Do NOT dump it into general text! Do NOT output empty rows. Do NOT use HTML tags like <br> or <br/> inside table cells - use regular text or line breaks.)
 {
   "type": "table",
   "data": {
@@ -147,10 +147,7 @@ export async function callGeminiVision(imageBase64: string, apiKey: string, mode
   const parsed = JSON.parse(cleanJson);
 
   return {
-    payload: {
-      type: parsed.type || 'general',
-      data: parsed.data || parsed,
-    } as ExtractedPayload,
+    payload: sanitizeVisionPayload(parsed),
     rawText: parsed.rawText || rawContent,
   };
 }
@@ -200,10 +197,48 @@ export async function callGroqVision(imageBase64: string, apiKey: string, model:
   const parsed = JSON.parse(rawContent);
 
   return {
-    payload: {
-      type: parsed.type || 'general',
-      data: parsed.data || parsed,
-    } as ExtractedPayload,
+    payload: sanitizeVisionPayload(parsed),
     rawText: parsed.rawText || rawContent,
   };
 }
+
+/**
+ * Sanitizes vision AI payload: cleans <br> tags from headers/cells and strips empty rows
+ */
+function sanitizeVisionPayload(parsed: any): ExtractedPayload {
+  if (parsed.type === 'table' && parsed.data) {
+    const rawHeaders = Array.isArray(parsed.data.headers) ? parsed.data.headers : [];
+    const rawRows = Array.isArray(parsed.data.rows) ? parsed.data.rows : [];
+
+    const headers = rawHeaders.map((h: any) =>
+      String(h ?? '').replace(/<br\s*\/?>/gi, ' ').trim()
+    );
+
+    const rows = rawRows
+      .map((row: any) =>
+        (Array.isArray(row) ? row : []).map((cell: any) =>
+          String(cell ?? '').replace(/<br\s*\/?>/gi, '\n').trim()
+        )
+      )
+      .filter((row: string[]) =>
+        row.some((cell: string) => cell.replace(/<br\s*\/?>/gi, '').trim().length > 0)
+      );
+
+    return {
+      type: 'table',
+      data: {
+        headers,
+        rows,
+        rawText:
+          parsed.data.rawText ||
+          [headers.join('\t'), ...rows.map((r: string[]) => r.join('\t'))].join('\n'),
+      },
+    };
+  }
+
+  return {
+    type: parsed.type || 'general',
+    data: parsed.data || parsed,
+  } as ExtractedPayload;
+}
+

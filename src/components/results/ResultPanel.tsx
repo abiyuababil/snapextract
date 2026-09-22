@@ -29,6 +29,15 @@ export const ResultPanel: React.FC<ResultPanelProps> = ({
 }) => {
   const { toast } = useToast();
   const [activeTab, setActiveTab] = useState<TabType>('smart');
+  const [prevResultId, setPrevResultId] = useState(result.id);
+  const [customRawText, setCustomRawText] = useState<string | null>(null);
+
+  if (prevResultId !== result.id) {
+    setPrevResultId(result.id);
+    setCustomRawText(null);
+  }
+
+  const rawDisplayText = customRawText !== null ? customRawText : result.rawText;
 
   const handleExportJson = () => {
     exportResultAsJson(result);
@@ -36,8 +45,18 @@ export const ResultPanel: React.FC<ResultPanelProps> = ({
   };
 
   const handleCopyRaw = async () => {
-    const ok = await copyToClipboard(result.rawText);
+    const ok = await copyToClipboard(rawDisplayText);
     if (ok) toast('Text copied', 'success');
+  };
+
+  const handleCleanRaw = () => {
+    const brRegex = /<br\s*\/?>/gi;
+    const hasBr = brRegex.test(rawDisplayText);
+    let cleaned = rawDisplayText.replace(brRegex, '\n').replace(/\r\n/g, '\n');
+    const filteredLines = cleaned.split('\n').filter((l) => l.trim().length > 0);
+    cleaned = filteredLines.join('\n');
+    setCustomRawText(cleaned);
+    toast(hasBr ? 'Cleaned <br> tags & empty lines' : 'Removed empty lines', 'success');
   };
 
   const renderSmartCard = () => {
@@ -169,7 +188,17 @@ export const ResultPanel: React.FC<ResultPanelProps> = ({
 
         {activeTab === 'raw' && (
           <div className="space-y-2">
-            <div className="flex justify-end">
+            <div className="flex items-center justify-between gap-2">
+              <button
+                type="button"
+                onClick={handleCleanRaw}
+                className="flex items-center gap-1 px-2 py-0.5 rounded bg-[#161D2C] hover:bg-[#1E2638] text-[11px] text-gray-300 border border-[#242F44] transition-colors"
+                title="Remove empty lines and clean <br> tags"
+              >
+                <Sparkles className="w-3 h-3 text-indigo-400" />
+                <span>Clean &lt;br&gt; & Empty Lines</span>
+              </button>
+
               <button
                 type="button"
                 onClick={handleCopyRaw}
@@ -180,7 +209,7 @@ export const ResultPanel: React.FC<ResultPanelProps> = ({
               </button>
             </div>
             <div className="p-3 rounded-lg bg-[#070A10] border border-[#1E2638] text-xs font-mono text-gray-300 whitespace-pre-wrap leading-relaxed">
-              {result.rawText || 'No text detected.'}
+              {rawDisplayText || 'No text detected.'}
             </div>
           </div>
         )}

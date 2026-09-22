@@ -43,10 +43,30 @@ export function exportResultAsJson(result: ExtractionResult): void {
   downloadFile(jsonStr, `${safeName}_${result.id.slice(0, 6)}.json`, 'application/json');
 }
 
-export function exportTableAsCsv(table: TableData, title: string = 'table_export'): void {
-  const rows = [table.headers, ...table.rows];
-  const csvContent = rows
-    .map(row => 
+export function exportTableAsCsv(
+  table: TableData,
+  title: string = 'table_export',
+  options?: { removeEmptyRows?: boolean; cleanBr?: boolean }
+): void {
+  let headers = table.headers || [];
+  let rows = table.rows || [];
+
+  if (options?.cleanBr ?? true) {
+    headers = headers.map(h => h.replace(/<br\s*\/?>/gi, ' ').trim());
+    rows = rows.map(row =>
+      row.map(cell => String(cell ?? '').replace(/<br\s*\/?>/gi, '\n').trim())
+    );
+  }
+
+  if (options?.removeEmptyRows ?? true) {
+    rows = rows.filter(row =>
+      row.some(cell => String(cell ?? '').replace(/<br\s*\/?>/gi, '').trim().length > 0)
+    );
+  }
+
+  const allRows = [headers, ...rows];
+  const csvContent = allRows
+    .map(row =>
       row.map(cell => {
         const str = String(cell ?? '').replace(/"/g, '""');
         return `"${str}"`;
