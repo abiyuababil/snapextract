@@ -8,7 +8,16 @@ import { TableCard } from './TableCard';
 import { VCardCard } from './VCardCard';
 import { UrlCard, GeoCard, BarcodeCard } from './UrlGeoCard';
 import { RawTextCard } from './RawTextCard';
-import { Download, Copy, RefreshCw, Sparkles } from 'lucide-react';
+import {
+  Download,
+  Copy,
+  RefreshCw,
+  Sparkles,
+  Check,
+  RotateCcw,
+  Eraser,
+  Code2,
+} from 'lucide-react';
 import { exportResultAsJson, copyToClipboard } from '../../lib/export-utils';
 import { useToast } from '../ui/Toast';
 
@@ -30,33 +39,105 @@ export const ResultPanel: React.FC<ResultPanelProps> = ({
   const { toast } = useToast();
   const [activeTab, setActiveTab] = useState<TabType>('smart');
   const [prevResultId, setPrevResultId] = useState(result.id);
-  const [customRawText, setCustomRawText] = useState<string | null>(null);
 
+  // Editable Raw Text
+  const [editableRaw, setEditableRaw] = useState(result.rawText || '');
+  const [isCopiedRaw, setIsCopiedRaw] = useState(false);
+
+  // Editable JSON
+  const [editableJson, setEditableJson] = useState(() =>
+    JSON.stringify(result, null, 2)
+  );
+  const [isCopiedJson, setIsCopiedJson] = useState(false);
+
+  // Sync state if result changes
   if (prevResultId !== result.id) {
     setPrevResultId(result.id);
-    setCustomRawText(null);
+    setEditableRaw(result.rawText || '');
+    setEditableJson(JSON.stringify(result, null, 2));
   }
 
-  const rawDisplayText = customRawText !== null ? customRawText : result.rawText;
+  // Validate JSON
+  let isJsonValid = true;
+  let jsonErrorMsg = '';
+  try {
+    JSON.parse(editableJson);
+  } catch (err: any) {
+    isJsonValid = false;
+    jsonErrorMsg = err.message || 'Invalid syntax';
+  }
 
   const handleExportJson = () => {
-    exportResultAsJson(result);
-    toast('JSON file downloaded', 'success');
+    try {
+      const parsed = JSON.parse(editableJson);
+      exportResultAsJson(parsed);
+      toast('JSON file downloaded', 'success');
+    } catch {
+      exportResultAsJson(result);
+      toast('JSON file downloaded', 'success');
+    }
   };
 
   const handleCopyRaw = async () => {
-    const ok = await copyToClipboard(rawDisplayText);
-    if (ok) toast('Text copied', 'success');
+    const ok = await copyToClipboard(editableRaw);
+    if (ok) {
+      setIsCopiedRaw(true);
+      toast('Text copied to clipboard', 'success');
+      setTimeout(() => setIsCopiedRaw(false), 1500);
+    }
   };
 
-  const handleCleanRaw = () => {
+  const handleCleanRawBr = () => {
     const brRegex = /<br\s*\/?>/gi;
-    const hasBr = brRegex.test(rawDisplayText);
-    let cleaned = rawDisplayText.replace(brRegex, '\n').replace(/\r\n/g, '\n');
-    const filteredLines = cleaned.split('\n').filter((l) => l.trim().length > 0);
-    cleaned = filteredLines.join('\n');
-    setCustomRawText(cleaned);
-    toast(hasBr ? 'Cleaned <br> tags & empty lines' : 'Removed empty lines', 'success');
+    const matches = editableRaw.match(brRegex);
+    if (matches && matches.length > 0) {
+      const cleaned = editableRaw.replace(brRegex, '\n').replace(/\n{3,}/g, '\n\n');
+      setEditableRaw(cleaned);
+      toast(`Cleaned ${matches.length} <br> tag${matches.length > 1 ? 's' : ''}`, 'success');
+    } else {
+      toast('No <br> tags found', 'info');
+    }
+  };
+
+  const handleRemoveRawEmptyLines = () => {
+    const lines = editableRaw.split(/\r?\n/);
+    const nonEmpty = lines.filter((l) => l.trim().length > 0);
+    const removed = lines.length - nonEmpty.length;
+    if (removed > 0) {
+      setEditableRaw(nonEmpty.join('\n'));
+      toast(`Removed ${removed} empty line${removed > 1 ? 's' : ''}`, 'success');
+    } else {
+      toast('No empty lines found', 'info');
+    }
+  };
+
+  const handleResetRaw = () => {
+    setEditableRaw(result.rawText || '');
+    toast('Restored original raw text', 'info');
+  };
+
+  const handleCopyJson = async () => {
+    const ok = await copyToClipboard(editableJson);
+    if (ok) {
+      setIsCopiedJson(true);
+      toast('JSON copied to clipboard', 'success');
+      setTimeout(() => setIsCopiedJson(false), 1500);
+    }
+  };
+
+  const handleFormatJson = () => {
+    try {
+      const parsed = JSON.parse(editableJson);
+      setEditableJson(JSON.stringify(parsed, null, 2));
+      toast('JSON formatted', 'success');
+    } catch {
+      toast('Cannot format invalid JSON', 'error');
+    }
+  };
+
+  const handleResetJson = () => {
+    setEditableJson(JSON.stringify(result, null, 2));
+    toast('Restored original JSON', 'info');
   };
 
   const renderSmartCard = () => {
@@ -83,12 +164,15 @@ export const ResultPanel: React.FC<ResultPanelProps> = ({
       case 'code':
       case 'general':
       default:
-        return <RawTextCard payload={p as any} rawText={result.rawText} />;
+        return <RawTextCard payload={p as any} rawText={editableRaw} />;
     }
   };
 
   const isLocalEngine = result.engine === 'local-ocr';
   const isAiEngine = result.engine === 'gemini-vision' || result.engine === 'groq-vision';
+
+  const rawLines = editableRaw ? editableRaw.split(/\r?\n/) : [];
+  const rawEmptyLineCount = rawLines.filter((l) => l.trim().length === 0).length;
 
   return (
     <div className="flex flex-col h-full bg-[#0E131F] border border-[#1E2638] rounded-xl overflow-hidden">
@@ -186,48 +270,151 @@ export const ResultPanel: React.FC<ResultPanelProps> = ({
       <div className="flex-1 p-4 overflow-y-auto max-h-[560px]">
         {activeTab === 'smart' && renderSmartCard()}
 
+        {/* Editable Raw Text Tab */}
         {activeTab === 'raw' && (
-          <div className="space-y-2">
-            <div className="flex items-center justify-between gap-2">
-              <button
-                type="button"
-                onClick={handleCleanRaw}
-                className="flex items-center gap-1 px-2 py-0.5 rounded bg-[#161D2C] hover:bg-[#1E2638] text-[11px] text-gray-300 border border-[#242F44] transition-colors"
-                title="Remove empty lines and clean <br> tags"
-              >
-                <Sparkles className="w-3 h-3 text-indigo-400" />
-                <span>Clean &lt;br&gt; & Empty Lines</span>
-              </button>
+          <div className="space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-2 p-2.5 rounded-lg bg-[#121824] border border-[#1E2638]">
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-mono font-medium text-gray-300">
+                  {rawLines.length} lines, {editableRaw.trim() ? editableRaw.trim().split(/\s+/).length : 0} words
+                </span>
+                {rawEmptyLineCount > 0 && (
+                  <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                    {rawEmptyLineCount} blank
+                  </span>
+                )}
+              </div>
 
-              <button
-                type="button"
-                onClick={handleCopyRaw}
-                className="flex items-center gap-1 text-[11px] text-gray-400 hover:text-white"
-              >
-                <Copy className="w-3 h-3" />
-                <span>Copy</span>
-              </button>
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <button
+                  type="button"
+                  onClick={handleRemoveRawEmptyLines}
+                  className={`flex items-center gap-1 px-2 py-1 rounded text-xs transition-colors border ${
+                    rawEmptyLineCount > 0
+                      ? 'bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border-amber-500/40'
+                      : 'bg-[#161D2C] hover:bg-[#1E2638] text-gray-300 border-[#242F44]'
+                  }`}
+                  title="Delete empty lines"
+                >
+                  <Eraser className="w-3 h-3 text-amber-400" />
+                  <span>Remove Empty Lines</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleCleanRawBr}
+                  className="flex items-center gap-1 px-2 py-1 rounded bg-[#161D2C] hover:bg-[#1E2638] text-gray-300 text-xs border border-[#242F44] transition-colors"
+                  title="Clean <br> tags"
+                >
+                  <Sparkles className="w-3 h-3 text-indigo-400" />
+                  <span>Clean &lt;br&gt;</span>
+                </button>
+
+                {editableRaw !== result.rawText && (
+                  <button
+                    type="button"
+                    onClick={handleResetRaw}
+                    className="flex items-center gap-1 px-2 py-1 rounded bg-[#161D2C] hover:bg-[#1E2638] text-gray-300 text-xs border border-[#242F44] transition-colors"
+                    title="Reset to original text"
+                  >
+                    <RotateCcw className="w-3 h-3 text-gray-400" />
+                    <span>Reset</span>
+                  </button>
+                )}
+
+                <button
+                  type="button"
+                  onClick={handleCopyRaw}
+                  className="flex items-center gap-1 px-2.5 py-1 rounded bg-white hover:bg-gray-100 text-black font-medium text-xs transition-colors ml-1"
+                >
+                  {isCopiedRaw ? <Check className="w-3 h-3 text-emerald-600" /> : <Copy className="w-3 h-3" />}
+                  <span>{isCopiedRaw ? 'Copied' : 'Copy'}</span>
+                </button>
+              </div>
             </div>
-            <div className="p-3 rounded-lg bg-[#070A10] border border-[#1E2638] text-xs font-mono text-gray-300 whitespace-pre-wrap leading-relaxed">
-              {rawDisplayText || 'No text detected.'}
+
+            <div className="rounded-lg border border-[#1E2638] bg-[#070A10] p-3">
+              <textarea
+                rows={Math.max(8, Math.min(22, rawLines.length + 1))}
+                value={editableRaw}
+                onChange={(e) => setEditableRaw(e.target.value)}
+                className="w-full bg-transparent text-xs font-mono text-gray-200 leading-relaxed focus:outline-none resize-none"
+                placeholder="Type or edit raw text here..."
+              />
+            </div>
+            <div className="text-[11px] text-gray-500 px-1">
+              <span>💡 You can directly type, add, or delete lines above. All edits are preserved for copying and exporting.</span>
             </div>
           </div>
         )}
 
+        {/* Editable JSON Tab */}
         {activeTab === 'json' && (
-          <div className="space-y-2">
-            <div className="flex justify-end">
-              <button
-                type="button"
-                onClick={() => copyToClipboard(JSON.stringify(result, null, 2))}
-                className="flex items-center gap-1 text-[11px] text-gray-400 hover:text-white"
-              >
-                <Copy className="w-3 h-3" />
-                <span>Copy</span>
-              </button>
+          <div className="space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-2 p-2.5 rounded-lg bg-[#121824] border border-[#1E2638]">
+              <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1 text-xs font-mono text-gray-300">
+                  <Code2 className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>JSON Payload</span>
+                </div>
+                {isJsonValid ? (
+                  <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                    Valid JSON
+                  </span>
+                ) : (
+                  <span
+                    className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-red-500/10 text-red-400 border border-red-500/20"
+                    title={jsonErrorMsg}
+                  >
+                    Syntax Error
+                  </span>
+                )}
+              </div>
+
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <button
+                  type="button"
+                  onClick={handleFormatJson}
+                  className="flex items-center gap-1 px-2 py-1 rounded bg-[#161D2C] hover:bg-[#1E2638] text-gray-300 text-xs border border-[#242F44] transition-colors"
+                  title="Beautify and format JSON"
+                >
+                  <Sparkles className="w-3 h-3 text-indigo-400" />
+                  <span>Format</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleResetJson}
+                  className="flex items-center gap-1 px-2 py-1 rounded bg-[#161D2C] hover:bg-[#1E2638] text-gray-300 text-xs border border-[#242F44] transition-colors"
+                  title="Reset to original JSON"
+                >
+                  <RotateCcw className="w-3 h-3 text-gray-400" />
+                  <span>Reset</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleCopyJson}
+                  className="flex items-center gap-1 px-2.5 py-1 rounded bg-white hover:bg-gray-100 text-black font-medium text-xs transition-colors ml-1"
+                >
+                  {isCopiedJson ? <Check className="w-3 h-3 text-emerald-600" /> : <Copy className="w-3 h-3" />}
+                  <span>{isCopiedJson ? 'Copied' : 'Copy'}</span>
+                </button>
+              </div>
             </div>
-            <div className="p-3 rounded-lg bg-[#070A10] border border-[#1E2638] text-xs font-mono text-gray-300 overflow-x-auto">
-              <pre>{JSON.stringify(result, null, 2)}</pre>
+
+            <div className="rounded-lg border border-[#1E2638] bg-[#070A10] p-3">
+              <textarea
+                rows={16}
+                value={editableJson}
+                onChange={(e) => setEditableJson(e.target.value)}
+                className="w-full bg-transparent text-xs font-mono text-gray-200 leading-relaxed focus:outline-none resize-none"
+                placeholder="Edit JSON data..."
+                spellCheck={false}
+              />
+            </div>
+            <div className="text-[11px] text-gray-500 px-1">
+              <span>💡 You can directly modify, add, or delete keys and values in the JSON structure.</span>
             </div>
           </div>
         )}
@@ -235,4 +422,3 @@ export const ResultPanel: React.FC<ResultPanelProps> = ({
     </div>
   );
 };
-
