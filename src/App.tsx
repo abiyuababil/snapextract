@@ -11,6 +11,7 @@ import { ExtractionResult, AppSettings } from './types/extractor';
 import { OCRProgress } from './lib/local-ocr';
 import { History, SlidersHorizontal } from 'lucide-react';
 import { Analytics } from '@vercel/analytics/react';
+import { BrandLogo } from './components/BrandLogo';
 
 interface ImageHistoryEntry {
   imageDataUrl: string;
@@ -141,9 +142,7 @@ export function SnapExtractApp() {
             className="flex items-center gap-2 cursor-pointer select-none" 
             onClick={handleReset}
           >
-            <div className="w-6 h-6 rounded bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400 font-mono text-xs font-bold">
-              SE
-            </div>
+            <BrandLogo size={24} />
             <span className="font-semibold text-sm tracking-tight text-white">
               SnapExtract
             </span>
